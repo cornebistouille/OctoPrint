@@ -798,11 +798,8 @@ class MachineCom(object):
 			context.update(dict(cancel_position=self.cancel_position,
 			                    cancel_temperature=self.cancel_temperature.as_script_dict()))
 
-		template = settings().loadScript("gcode", scriptName, context=context)
-		if template is None:
-			scriptLines = []
-		else:
-			scriptLines = template.split("\n")
+		scriptLinesPrefix = []
+		scriptLinesSuffix = []
 
 		for hook in self._gcodescript_hooks:
 			try:
@@ -812,7 +809,7 @@ class MachineCom(object):
 			else:
 				if retval is None:
 					continue
-				if not isinstance(retval, (list, tuple)) or not len(retval) == 2:
+				if not isinstance(retval, (list, tuple)) or not len(retval) in [2, 3]:
 					continue
 
 				def to_list(data):
@@ -826,11 +823,23 @@ class MachineCom(object):
 					else:
 						return None
 
-				prefix, suffix = map(to_list, retval)
+				prefix, suffix = map(to_list, retval[0:2])
 				if prefix:
-					scriptLines = list(prefix) + scriptLines
+					scriptLinesPrefix = list(prefix) + scriptLinesPrefix
 				if suffix:
-					scriptLines += list(suffix)
+					scriptLinesSuffix += list(suffix)
+
+				if len(retval) == 3:
+					variables = retval[2]
+					context.update(variables)
+
+		template = settings().loadScript("gcode", scriptName, context=context)
+		if template is None:
+			scriptLines = []
+		else:
+			scriptLines = template.split("\n")
+
+		scriptLines = scriptLinesPrefix + scriptLines + scriptLinesSuffix
 
 		return filter(lambda x: x is not None and x.strip() != "",
 		              map(lambda x: process_gcode_line(x, offsets=self._tempOffsets, current_tool=self._currentTool),
